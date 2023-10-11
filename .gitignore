@@ -30,3 +30,12 @@
 *.exe
 *.out
 *.app
+
+# particular build output for this implementation
+dbeaver_fmt
+
+# ignore samples
+*.sql
+
+# ignore vscode stuff
+.vscode
