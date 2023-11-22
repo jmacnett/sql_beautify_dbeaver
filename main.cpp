@@ -5,22 +5,27 @@
 #include "beautify.h"
 using namespace std;
 
-string processcontent(string raw)
-{
-    string processed = beautify(raw);
-    // example(raw)
-    // processed.append("\ncows");
-    return processed;
-}
-
 int main(int argc, char* argv[])
 {
-    if(argc != 2) 
+    if(argc != 2 && argc != 3) 
     {
         cerr << "This program only accepts a single 'path' argument.\n";
         return 1;
     }
 
+    bool debug = false;
+    if(argc == 3)
+        cout << "first check passed" << endl;
+    // this is broken
+    if(argv[2] == "--debug")
+        cout << "second check passed" << endl;
+    if(argc == 3 && argv[2] == "--debug") {
+        debug = true;
+    }
+    else {
+        cout << argc << endl;
+        cout << argv[2] << endl;
+    }
     const char* srcpath = argv[1];
     //printf("File path: %s\n", srcpath);
 
@@ -52,7 +57,7 @@ int main(int argc, char* argv[])
     }
     
     // start our formatting
-    string formatted = processcontent(raw);
+    string formatted = beautify(raw, debug);
 
     // this actually writes it back to dbeaver (not writing back to temp file)
     cout << formatted;
