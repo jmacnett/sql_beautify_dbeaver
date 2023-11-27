@@ -19,12 +19,15 @@ int main(int argc, char* argv[])
     // this is broken
     if(argv[2] == "--debug")
         cout << "second check passed" << endl;
-    if(argc == 3 && argv[2] == "--debug") {
-        debug = true;
-    }
-    else {
-        cout << argc << endl;
-        cout << argv[2] << endl;
+    if(argc == 3) 
+    {
+        if(argv[2] == "--debug") {
+            debug = true;
+        }
+        else {
+            cout << argc << endl;
+            cout << argv[2] << endl;
+        }
     }
     const char* srcpath = argv[1];
     //printf("File path: %s\n", srcpath);
