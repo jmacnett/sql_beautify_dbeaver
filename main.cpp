@@ -64,18 +64,7 @@ int main(int argc, char* argv[])
 
     // this actually writes it back to dbeaver (not writing back to temp file)
     cout << formatted;
-
-    // ofstream tgt (tgtpath,ios::trunc);
-    // if(tgt.is_open()) 
-    // {
-    //     tgt << formatted;
-    //     tgt.close();
-    // }
-    // else 
-    // {
-    //     cerr << "Unable to write to target file!\n";
-    //     return 3;
-    // }
+    //cout << raw;
 
     return 0;
 }

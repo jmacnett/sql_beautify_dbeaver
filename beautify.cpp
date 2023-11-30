@@ -31,6 +31,24 @@ std::vector<string> split(string raw, string delimiter)
     return arr;
 }
 
+std::queue<string> splitToQueue(string raw, string delimiter)
+{
+    // extract each token
+    std::queue<string> arr;
+    
+    size_t pos = 0;
+    std::string token;
+    while ((pos = raw.find(delimiter)) != std::string::npos) {
+        token = raw.substr(0, pos);
+        arr.push(token);
+        //std::cout << token << std::endl;
+        raw.erase(0, pos + delimiter.length());
+    }
+    arr.push(raw);
+
+    return arr;
+}
+
 class CodeBlock
 {
     private:
@@ -38,7 +56,7 @@ class CodeBlock
     int _baseindent;
     bool _debug;
     vector<string> BLOCK_START = {"select", "insert", "update", "delete", "truncate", "("};
-    vector<string> BLOCK_INNER_KEYWORDS = { "from", "where", "order" };
+    vector<string> BLOCK_INNER_KEYWORDS = { "from", "where", "order", "set" };
     vector<string> BLOCK_END = {")", ";"};
 
     string normalize(string raw, string delimiter = " ")
@@ -52,9 +70,9 @@ class CodeBlock
         return trim(std::regex_replace(raw, spchars, delimiter),' ');
     }
 
-    void appendIndented(int currentIndent, string& tgt, string toAppend, string prefix="", string trail = "")
+    void appendIndented(size_t currentIndent, string& tgt, string toAppend, string prefix="", string trail = "")
     {
-        tgt.append(' ', currentIndent);
+        tgt.append(currentIndent, ' ');
         tgt.append(prefix);
         tgt.append(toAppend);
         tgt.append(trail);
@@ -75,6 +93,8 @@ class CodeBlock
         if(normalized.empty())
             return "";
 
+        // return normalized;
+
         // ***TODO: we need to detect comment lines here (// and /* */ formats) and preserve their location for re-insertion
 
         // split into tokens
@@ -92,10 +112,10 @@ class CodeBlock
             string utkn = tkn;
             std:transform(tkn.begin(), tkn.end(), utkn.begin(), [](unsigned char c){ return std::tolower(c); });
 
-            if(_debug) 
-                cout << utkn << endl;
-            if(_debug) 
-                cout << "working indent: " << workingIndent << endl;
+            // if(_debug) 
+            //     cout << tkn << endl;
+            // if(_debug) 
+            //     cout << "working indent: " << workingIndent << endl;
 
             // check for block starters
             found = find (BLOCK_START.begin(), BLOCK_START.end(), utkn);
@@ -106,7 +126,9 @@ class CodeBlock
                     // if we find another block starter and we're already in a block, it's nested;
                     // pass to another level
                     //appendIndented(workingIndent, )
-                    cout << "/* found a sub-block! */"  << endl;
+                    //cout << "/* found a sub-block! */"  << endl;
+                    appendIndented(workingIndent, processed, "/* found a sub-block! */" , "", " ");
+                    appendIndented(workingIndent, processed, tkn , "", " ");
                 }
                 else 
                 {
@@ -145,7 +167,6 @@ class CodeBlock
     }
 };
 
-//global string[] BLOCK_START = {"SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE"};
 string beautify(string raw, bool debug = false)
 {
     /*
@@ -164,10 +185,12 @@ string beautify(string raw, bool debug = false)
     std::stringstream processed;
     for(string bl : blockarr)
     {
-        string lres = (new CodeBlock(bl, 0, debug))->Process();
+        string lres = trim((new CodeBlock(bl, 0, debug))->Process(), ' ');
+        //string lres = bl;
         // processed.append(lres);
         // processed.append(std::endl);
-        processed << lres << ';' << std::endl << std::endl;
+        if(!lres.empty())
+            processed << lres << ';' << std::endl << std::endl;
     }
 
     return processed.str();
