@@ -54,6 +54,7 @@ class CodeBlock
     private:
     string _rawblock;
     int _baseindent;
+    int _indentInterval = 5;
     bool _debug;
     vector<string> BLOCK_START = {"select", "insert", "update", "delete", "truncate", "("};
     vector<string> BLOCK_INNER_KEYWORDS = { "from", "where", "order", "set" };
@@ -64,8 +65,14 @@ class CodeBlock
         if(raw.empty())
             return raw;
 
+        std::regex commasplit(",");
+        raw = std::regex_replace(raw, commasplit, " , ");
+
+        std::regex psplit(",");
+        raw = std::regex_replace(raw, psplit, " , ");
+
         // create regex to strip all seperator characters in favor of a single string
-        std:regex spchars("[\t\r\n ]+");
+        std::regex spchars("[\t\r\n ]+");
         //std:regex spchars("[\t\r ]+");
         return trim(std::regex_replace(raw, spchars, delimiter),' ');
     }
@@ -76,6 +83,73 @@ class CodeBlock
         tgt.append(prefix);
         tgt.append(toAppend);
         tgt.append(trail);
+    }
+
+    string tolower(string tkn)
+    {
+        string utkn = tkn;
+        std:transform(tkn.begin(), tkn.end(), utkn.begin(), [](unsigned char c){ return std::tolower(c); });
+        return utkn;
+    }
+
+    void readSelect(size_t indent, string& tgt, queue<string>& tokens) {
+        // based on our ghetto peek, the first token should be 'select'
+        string tkn = tokens.front();
+        tokens.pop();
+        appendIndented(indent, tgt, tkn);
+
+        /* Next, we're continuing to look for sets of characters as attributes, including
+            - column names
+            - column names w aliases
+            - parenthesis (which could honestly be nested subselects, etc)
+         
+           Until we find either
+           - a FROM keyword
+           - another BLOCK_START keywork while not in parenthesis, as this would indicate
+           the end of the statement as well
+
+           Once we hit "from", handle that seperately
+        */
+        
+        // get columns
+        bool selectTrail = false;
+        while(!tokens.empty())
+        {
+            tkn = tokens.front();
+            string utkn = tolower(tkn);
+            tokens.pop();
+
+            // if we have a hard terminator with no from block, break;
+            if(tkn == ";") {
+                tgt += ";";
+                return;
+            }
+
+            // if we hit the from clause, break, we're not doing columns anymore
+            if(utkn == "from") {
+                appendIndented(indent, tgt, tkn, "\n");
+                break;
+            }
+
+            // look for commas (should all be split out)
+            if(tkn == ",")
+            {
+                appendIndented(indent + _indentInterval, tgt, tkn, "\n", " ");
+                continue;
+            }
+
+            // append default
+            if(!selectTrail) {
+                appendIndented(0, tgt, tkn, " ");
+                selectTrail = true;
+            }
+            else
+                appendIndented(0, tgt, tkn, " ");
+
+            // TODO: handle parenthesis
+        }
+
+        // we hit the from; do table indent logic
     }
 
     public:
@@ -98,68 +172,87 @@ class CodeBlock
         // ***TODO: we need to detect comment lines here (// and /* */ formats) and preserve their location for re-insertion
 
         // split into tokens
-        vector<string> tokens = split(normalized," ");
+        queue<string> tokens = splitToQueue(normalized," ");
         string processed;
-        bool inBlock = false;
-
-        // process our tokens; our first token should start our block, but eh
         int workingIndent = _baseindent;
-        for(string tkn : tokens)
-        {
-            vector<string>::iterator found;
 
+        while(!tokens.empty())
+        {
             // get lowercase token
+            string tkn = tokens.front();
             string utkn = tkn;
             std:transform(tkn.begin(), tkn.end(), utkn.begin(), [](unsigned char c){ return std::tolower(c); });
 
-            // if(_debug) 
-            //     cout << tkn << endl;
-            // if(_debug) 
-            //     cout << "working indent: " << workingIndent << endl;
-
-            // check for block starters
-            found = find (BLOCK_START.begin(), BLOCK_START.end(), utkn);
-            if(found != BLOCK_START.end()) 
-            {
-                if(inBlock) 
-                {
-                    // if we find another block starter and we're already in a block, it's nested;
-                    // pass to another level
-                    //appendIndented(workingIndent, )
-                    //cout << "/* found a sub-block! */"  << endl;
-                    appendIndented(workingIndent, processed, "/* found a sub-block! */" , "", " ");
-                    appendIndented(workingIndent, processed, tkn , "", " ");
-                }
-                else 
-                {
-                    if(_debug) 
-                        cout << "found a block!" << endl;
-                    // we found a major block item; write it and continue
-                    appendIndented(workingIndent, processed, tkn, "", " ");
-                    inBlock = true;
-                    workingIndent += 5;
-                }
+            if(utkn == "select") { 
+                readSelect(workingIndent, processed, tokens);
                 continue;
             }
 
-            // check for in-block newline values (e.g. commas, FROM clauses, etc)
-            vector<string>::iterator found2;
-            found2 = find (BLOCK_INNER_KEYWORDS.begin(), BLOCK_INNER_KEYWORDS.end(), utkn);
-            if(found2 != BLOCK_INNER_KEYWORDS.end()) 
-            {
-                if(_debug)
-                    cout << "in secondary block!" << endl;
-                workingIndent -= 5;
-                if(workingIndent < 0)
-                    workingIndent = 0;
-
-                appendIndented(workingIndent, processed, tkn, "\n", " ");
-                continue;
-            }
-
-            // if we reach this point, append with a space and continue
-            appendIndented(workingIndent, processed, tkn, "", " ");
+            // default, for now
+            tokens.pop();
+            appendIndented(workingIndent, processed, tkn, " ");
         }
+
+        // bool inBlock = false;
+
+        // // process our tokens; our first token should start our block, but eh
+        // int workingIndent = _baseindent;
+        // for(string tkn : tokens)
+        // {
+        //     vector<string>::iterator found;
+
+        //     // get lowercase token
+        //     string utkn = tkn;
+        //     std:transform(tkn.begin(), tkn.end(), utkn.begin(), [](unsigned char c){ return std::tolower(c); });
+
+        //     // if(_debug) 
+        //     //     cout << tkn << endl;
+        //     // if(_debug) 
+        //     //     cout << "working indent: " << workingIndent << endl;
+
+        //     // check for block starters
+        //     found = find (BLOCK_START.begin(), BLOCK_START.end(), utkn);
+        //     if(found != BLOCK_START.end()) 
+        //     {
+        //         if(inBlock) 
+        //         {
+        //             // if we find another block starter and we're already in a block, it's nested;
+        //             // pass to another level
+        //             //appendIndented(workingIndent, )
+        //             //cout << "/* found a sub-block! */"  << endl;
+        //             appendIndented(workingIndent, processed, "/* found a sub-block! */" , "", " ");
+        //             appendIndented(workingIndent, processed, tkn , "", " ");
+        //         }
+        //         else 
+        //         {
+        //             if(_debug) 
+        //                 cout << "found a block!" << endl;
+        //             // we found a major block item; write it and continue
+        //             appendIndented(workingIndent, processed, tkn, "", " ");
+        //             inBlock = true;
+        //             workingIndent += 5;
+        //         }
+        //         continue;
+        //     }
+
+        //     // check for in-block newline values (e.g. commas, FROM clauses, etc)
+        //     vector<string>::iterator found2;
+        //     found2 = find (BLOCK_INNER_KEYWORDS.begin(), BLOCK_INNER_KEYWORDS.end(), utkn);
+        //     if(found2 != BLOCK_INNER_KEYWORDS.end()) 
+        //     {
+        //         if(_debug)
+        //             cout << "in secondary block!" << endl;
+        //         workingIndent -= 5;
+        //         if(workingIndent < 0)
+        //             workingIndent = 0;
+
+        //         appendIndented(workingIndent, processed, tkn, "\n", " ");
+        //         continue;
+        //     }
+
+        //     // if we reach this point, append with a space and continue
+        //     appendIndented(workingIndent, processed, tkn, "", " ");
+        // }
 
 
 
