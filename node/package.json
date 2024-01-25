@@ -1,0 +1,11 @@
+{
+  "name": "sql_beautify",
+  "version": "0.1.0",
+  "description": "cli processor to format sql statements",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "jesse macnett",
+  "license": "ISC"
+}
