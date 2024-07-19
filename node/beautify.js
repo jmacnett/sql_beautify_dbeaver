@@ -3,7 +3,7 @@
 const wsregex = /[\t\r\n ]+/gm;
 const seperators = /[\t\r\n ;]+/gm;
 //const word = /^.*[\t\r\n ;]+/;
-const word = /^.*[\s;\,]+/;
+const word = /^.*?[\s;\,]+/;
 const leadingwhitespaceregex = /^[\t\r\n ]+/gm;
 const inlinecommentregex = /--.*$/gm;
 const blockcommentregex = /\/\*[\s\S]*?\*\//gm;
@@ -11,53 +11,60 @@ const blockcommentregex = /\/\*[\s\S]*?\*\//gm;
 const myindent = 5;
 
 const keywords = [
-    // { 
-    //     rekey: /^select.*/i, 
-    //     tf: (x, state) => {
-    //         // strip spaces from our select
-    //         x = x.replace(wsregex,'');
-    //         state.indent += myindent;
-    //         state.inListBlock = true;
-    //         state.stayInline = true;
-    //         return x;
-    //     }
-    // },
-    // {
-    //     rekey: /^from.*/i,
-    //     tf: (x, state) => {
-    //         state.indent -= myindent;
+    { 
+        rekey: /^select?[\s]+/i, 
+        tf: (x, state) => {
+            // strip spaces from our select
+            x = x.replace(wsregex,'');
+            state.indent += myindent;
+            state.inListBlock = true;
+            state.stayInline = true;
+            return x;
+        }
+    },
+    {
+        rekey: /^from?[\s]+/i,
+        tf: (x, state) => {
+            state.indent -= myindent;
 
-    //         // handle whitespace
-    //         x = x.replace(wsregex,'').padStart(state.indent, ' ');
-    //         x = '\n' + x;
-    //         state.inListBlock = false;
-    //         state.stayInline = true;
-    //         return x;
-    //     }
-    // },
-    // {
-    //     rekey: /^where.*/i,
-    //     tf: (x, state) => {
-    //         x = x.replace(wsregex,'').padStart(state.indent, ' ');
-    //         x = '\n' + x;
-    //         state.stayInline = true;
-    //         state.indent += myindent;
-    //         return x;
-    //     }
-    // },
-    // {
-    //     rekey: /^and.*/i,
-    //     tf: (x, state) => {
-    //         x = x.replace(wsregex,'');
-    //         x = '\n' + x.padStart(state.indent, ' ');
-    //         return x;
-    //     }
-    // }
+            // handle whitespace
+            x = x.replace(wsregex,''); //.padStart(state.indent, ' ');
+            x = '\n' + x;
+            state.inListBlock = false;
+            state.stayInline = true;
+            return x;
+        }
+    },
+    {
+        rekey: /^where?[\s]+/i,
+        tf: (x, state) => {
+            x = x.replace(wsregex,'').padStart(state.indent, ' ');
+            x = '\n' + x;
+            state.stayInline = true;
+            state.indent += myindent;
+            return x;
+        }
+    },
+    {
+        rekey: /^and?[\s]+/i,
+        tf: (x, state) => {
+            x = x.replace(wsregex,'');
+            x = '\n' + x.padStart(state.indent, ' ');
+            return x;
+        }
+    },
+    {
+        rekey: /;$/i,
+        tf: (x, state) => {
+            x = x.replace(wsregex,'');
+            x = x.padStart(state.indent, ' ') + '\n';
+            return x;
+        }
+    }
 ]
 
 function processNext(remaining, processed, state) {
     if(remaining.search(leadingwhitespaceregex) === 0) {
-
         // remove leading whitespace
         remaining = remaining.replace(leadingwhitespaceregex, '');
         return remaining;
@@ -67,8 +74,8 @@ function processNext(remaining, processed, state) {
     // TODO: other special cases
     if(remaining.search(blockcommentregex) === 0) {
         let next = remaining.match(blockcommentregex)[0];
-        next = next + '\n';
         remaining = remaining.replace(next, '');
+        next = `\n${next}\n`;
         processed.push(next);
         return remaining;
     }
@@ -80,9 +87,14 @@ function processNext(remaining, processed, state) {
         // check for extra processing requirements
         let extra = keywords.find(r=> r.rekey.test(next) && r.tf);
         if(extra) {
+            console.log(`found extra: ${next}`);
             next = extra.tf(next, state);
         }
         else {
+            // trim start & end ws seperators
+            next = next.replace(/[\t\r\n ]+$/, '')
+                .replace(leadingwhitespaceregex, '');
+
             // defaults
             if(state.stayInline) {
                 if(/[\n\r\t]/.test(next)) {
@@ -91,7 +103,7 @@ function processNext(remaining, processed, state) {
                     next = next.replace(/\t/g, '');
                 }
                 next = ' ' + next;
-                state.stayInline = false;
+               // state.stayInline = false;
             }
             else {
                 if(state.inListBlock) {
@@ -119,7 +131,6 @@ function processNext(remaining, processed, state) {
 }
 
 module.exports.process = function (rawsql) {
-
     let remaining = rawsql;
     let processed = [];
     const state = {
