@@ -82,18 +82,20 @@ function processNext(remaining, processed, state) {
     
     // at this point, we know there's no leading whitespace
 
+    // TBD: should we treat commas as individual tokens?  seems like yes?
+
     // TODO: other special cases
     if(remaining.search(blockcommentregex) === 0) {
         let next = remaining.match(blockcommentregex)[0];
         remaining = remaining.replace(next, '');
-        next = `\n\n${next}\n\n`;
+        //next = `\n\n${next}\n\n`;
         processed.push(next);
         return remaining;
     }
     if(remaining.search(inlinecommentregex) === 0) {
         let next = remaining.match(inlinecommentregex)[0];
         remaining = remaining.replace(next, '');
-        next = `\n${next}\n`;
+        //next = `\n${next}\n`;
         processed.push(next);
         return remaining;
     }
@@ -104,57 +106,30 @@ function processNext(remaining, processed, state) {
         return remaining;
     }
 
-
-    // default behavior: return next token, based on non-seperator characters followed by a seperatore (or end of line)
+    // experimenting w/ gathering all tokens first
     if(remaining.search(word) !== -1) {
         let next = remaining.match(word)[0];
         remaining = remaining.replace(next, '');
+        // remove trailling whitespace
+        next = next.replace(/[\s]+$/, '');
 
-        if(next.match(/;/)) {
-            const scsplit = next.replace(trailingwhitespace,'').split(';');
-            processed.push(`${scsplit[0] === ';' ? scsplit.shift() : ' ' + scsplit.shift() + ';'}\n\n`);
+        let trail;
 
-            // revisit; should we shove this back on the remaining stack?
-            processed.push(...scsplit);
-            state.indent = 0;
-            return remaining;
+        if(next.match(/,$/)) {
+            trail = ',';
+            next = next.replace(/,$/,'');
         }
-
-        // check for extra processing requirements
-        let extra = keywords.find(r=> r.rekey.test(next) && r.tf);
-        if(extra) {
-            //console.log(`found extra: ${next}`);
-            next = extra.tf(next, state);
-        }
-        else {
-            // trim start & end ws seperators
-            next = next.replace(trailingwhitespace, '')
-                .replace(leadingwhitespaceregex, '');
-
-            // defaults
-            if(state.stayInline) {
-                if(/[\s]/.test(next)) {
-                    next = next.replace(/\s/g, '');
-                }
-                next = ' ' + next;
-                //state.stayInline = false;
-            }
-            else {
-                if(state.inListBlock) {
-                    if(next.indexOf(',') !== -1) {
-                        next = next.replace(',','');
-                        next = ',' + next;
-                    }
-                }
-                next = next.padStart(state.stayInline ? 1 : state.indent, ' ');
-            }
+        if(next.match(/;$/)) {
+            trail = ';';
+            next = next.replace(/;$/,'');
         }
 
         processed.push(next);
-
+        if(trail) 
+            processed.push(trail);
         return remaining;
     }
-    
+
     // we're presumably at the end; grab what's left and end it
     if(remaining.length > 0) {
         processed.push(remaining);
@@ -164,22 +139,87 @@ function processNext(remaining, processed, state) {
     return remaining;
 }
 
+
+/*
+    compare formats to check:
+    > < = <> != >= <= 
+        expr "(a op b)"
+    between
+        expr "(a between b and c)"
+*/
+
+function stitch(tokens, state) {
+
+    let composited = '';
+
+    while(tokens.length > 0) {
+        let token = tokens.shift();
+
+        if(token.match(blockcommentregex)) {
+            composited += '\n' + token + '\n';
+            continue;
+        }
+        if(token.match(inlinecommentregex)) {
+            composited += ' ' + token + '\n';
+            continue;
+        }
+
+        switch(token.toLowerCase()) {
+            case ';':
+                composited += token + '\n\n';
+                state.indent = 0;
+                delete state.inquery;
+                break;
+            case ',':
+                composited += '\n' + token.padStart(state.indent, ' ');
+                break;
+            case 'select':
+            case 'insert':
+            case 'update':
+            case 'delete':
+            case 'truncate':
+                if(!state.inquery) {
+                    state.indent = 0;
+                    composited += '\n';
+                    state.inquery = token;
+                }
+                composited += token;
+                state.indent += myindent;
+                break;
+            case 'from':
+            case 'where':
+                state.indent -= myindent;
+                composited += '\n' + token.padStart(state.indent, ' ');
+                break;
+            default:
+                composited += ' ' + token;
+                break;
+        }
+
+    }
+
+    return composited;
+}
+
 module.exports.process = function (rawsql) {
     let remaining = rawsql;
-    let processed = [];
+    let tokenized = [];
     const state = {
         indent: 0,
         inListBlock: false,
         stayInline: false
     };
     while(remaining.length > 0) {
-        remaining = processNext(remaining, processed, state);
+        remaining = processNext(remaining, tokenized, state);
     }
 
     // debug
-    console.log(processed);
+    console.log(tokenized);
     console.log('------------------');
 
+    // process the tokens and construct our final statement 
+    return stitch(tokenized, state);
+
     //return blocks;
-    return processed.join('');
+    return tokenized.join(' ');
 }
