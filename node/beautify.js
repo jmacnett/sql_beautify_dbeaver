@@ -51,7 +51,7 @@ const keywords = [
             state.indent -= myindent;
 
             // handle whitespace
-            x = x.replace(wsregex,''); //.padStart(state.indent, ' ');
+            x = x.replace(wsregex,'').padStart(state.indent, ' ');
             x = '\n' + x;
             state.inListBlock = false;
             state.stayInline = true;
@@ -116,6 +116,7 @@ function processNext(remaining, processed, state) {
 
             // revisit; should we shove this back on the remaining stack?
             processed.push(...scsplit);
+            state.indent = 0;
             return remaining;
         }
 
