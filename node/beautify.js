@@ -142,7 +142,7 @@ function processNext(remaining, processed, state) {
 
 /*
     compare formats to check:
-    > < = <> != >= <= 
+    > < = <> != >= <= not
         expr "(a op b)"
     between
         expr "(a between b and c)"
@@ -152,15 +152,23 @@ function stitch(tokens, state) {
 
     let composited = '';
 
+    const appendChecked = (cmp, toCheck, toAppend)=> {
+        if(cmp.endsWith(toCheck))
+            return '';
+        return toAppend ?? toCheck;
+    }
+
+    state.indent = 0;
+
     while(tokens.length > 0) {
         let token = tokens.shift();
 
         if(token.match(blockcommentregex)) {
-            composited += '\n' + token + '\n';
+            composited += appendChecked(composited, '\n') + token + '\n\n';
             continue;
         }
         if(token.match(inlinecommentregex)) {
-            composited += ' ' + token + '\n';
+            composited += appendChecked(composited, '\n', ' ') + token + '\n';
             continue;
         }
 
@@ -173,6 +181,16 @@ function stitch(tokens, state) {
             case ',':
                 composited += '\n' + token.padStart(state.indent, ' ');
                 break;
+            case '(':
+                state.paren_cnt = (state.paren_cnt ?? 0) + 1;
+                composited += '\n' + token.padStart(state.indent, ' ');
+                state.indent += myindent;
+                break;
+            case ')':
+                state.paren_cnt = (state.paren_cnt ?? 0) - 1;
+                state.indent -= myindent;
+                composited += '\n' + token.padStart(state.indent, ' ');
+                break;
             case 'select':
             case 'insert':
             case 'update':
@@ -183,16 +201,44 @@ function stitch(tokens, state) {
                     composited += '\n';
                     state.inquery = token;
                 }
+                else {
+                    // we are in a query, and we didn't find an explicit end (TBD: parens)
+                    if(state.inquery !== 'select') {
+                        delete state.inquery;
+                        state.indent = 0;
+                        composited += '\n\n';
+                    }
+                    else {
+                        // if we're in a query
+                        if(state.paren_cnt > 0) {
+                     //       composited += '\n' + token.padStart(state.indent, ' ');
+                            composited += '\n\nBALLS!\n\n';
+                        }
+                    }
+                }
                 composited += token;
                 state.indent += myindent;
                 break;
             case 'from':
             case 'where':
                 state.indent -= myindent;
-                composited += '\n' + token.padStart(state.indent, ' ');
+                composited += appendChecked(composited, '\n') + token.padStart(state.indent, ' ');
+                break;
+            case 'inner':
+                state.indent += myindent;
+                console.log(token.padStart(state.indent, '*'));
+                composited += appendChecked(composited, '\n') 
+                    + token.padStart(state.indent, '*');
+                
+                // pull next token, which should always be "join"
+                if(tokens[0].toLowerCase().trim() === 'join')
+                    composited += ' ' + tokens.shift();
                 break;
             default:
-                composited += ' ' + token;
+                let space = ' ';
+                if(composited.endsWith(','))
+                    space = '';
+                composited += space + token;
                 break;
         }
 
